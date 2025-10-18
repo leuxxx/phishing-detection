@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "name": "Phishing URL Checker",
+  "version": "1.2",
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": { "128": "assets/icon128.png" }
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "permissions": [
+    "tabs",
+    "storage",
+    "activeTab",
+    "webNavigation",
+    "offscreen",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
+  ],
+
+  "host_permissions": [
+    "<all_urls>",
+    "https://safebrowsing.googleapis.com/*",
+    "https://www.virustotal.com/*",
+    "https://firestore.googleapis.com/*"
+  ],
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+
+  "sandbox": {
+    "pages": ["sandbox.html"]
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/*",
+        "blocked.html",
+        "blocked.js",
+        "safeBrowsing.js",
+        "obfuscation.js",
+        "sandbox.js",
+        "sandbox.html",
+        "whitelist.json",
+        "libs/tf.min.js",
+        "tfjs_phishing_model_optimized/model.json",
+        "tfjs_phishing_model_optimized/*.bin",
+        "tfjs_phishing_model_optimized/metadata.json"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
+  "icons": {
+    "128": "assets/icon128.png"
+  },
+
+  "offline_enabled": true
+}
