@@ -140,14 +140,15 @@ async function predictURL(url) {
         inputTensor.dispose();
         if (pred.dispose) pred.dispose();
 
-        // FIXED: Use EXACT same logic as extension
+        // FIXED: Low probability = PHISHING (model doesn't recognize it as safe)
         let status, classification;
-        if (probability >= threshold) {
+        if (probability <= threshold) {
             status = "phishing";
-            classification = `AI: Phishing (${(probability * 100).toFixed(1)}% match to known patterns)`;
+            const confidence = (1 - probability) * 100;
+            classification = `AI: Phishing pattern detected (${confidence.toFixed(1)}% confidence)`;
         } else {
-            status = "unknown";
-            classification = `AI: Unknown (${(probability * 100).toFixed(1)}% match to known patterns)`;
+            status = "safe";
+            classification = `AI: Likely safe (${(probability * 100).toFixed(1)}% confidence)`;
         }
 
         return { 
@@ -218,3 +219,4 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
     await loadModel();
 });
+
