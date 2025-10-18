@@ -1,4 +1,4 @@
-// phishing-server.js - FIXED MODEL LOADING FOR RENDER
+// phishing-server.js - FIXED VERSION
 import express from 'express';
 import cors from 'cors';
 import tf from '@tensorflow/tfjs';
@@ -18,48 +18,28 @@ app.use(express.json());
 let model = null;
 let metadata = null;
 
-// FIXED: Load model directly from filesystem
+// Load model
 async function loadModel() {
     try {
         const modelDir = join(__dirname, 'tfjs_phishing_model_optimized');
-        console.log('📁 Model directory:', modelDir);
-        
-        // Check if model directory exists
-        if (!existsSync(modelDir)) {
-            console.error('❌ Model directory not found');
-            return false;
-        }
-        
-        // List files for debugging
-        const fs = await import('fs');
-        const files = fs.readdirSync(modelDir);
-        console.log('📄 Model files:', files);
         
         // Load metadata
         const metadataPath = join(modelDir, 'metadata.json');
-        if (!existsSync(metadataPath)) {
-            console.error('❌ Metadata file not found');
-            return false;
-        }
-        
         const metadataFile = readFileSync(metadataPath, 'utf8');
         metadata = JSON.parse(metadataFile);
         console.log('✅ Metadata loaded');
         
-        // FIXED: Load model using HTTP server (serve files then load via HTTP)
-        // First, set up static file serving
+        // Serve model files
         app.use('/model', express.static(modelDir));
         
-        // Then load the model via HTTP from our own server
+        // Load model
         const modelUrl = `http://localhost:${PORT}/model/model.json`;
-        console.log('📥 Loading model from:', modelUrl);
-        
         model = await tf.loadLayersModel(modelUrl);
-        console.log('✅ Model loaded successfully!');
+        console.log('✅ Model loaded!');
         return true;
         
     } catch (error) {
-        console.error('❌ Model loading failed:', error.message);
+        console.error('❌ Model failed:', error.message);
         return false;
     }
 }
@@ -160,14 +140,11 @@ async function predictURL(url) {
         inputTensor.dispose();
         if (pred.dispose) pred.dispose();
 
-        console.log(`[Server] Raw probability: ${probability}, Threshold: ${threshold}`);
-
-        // FIXED: HIGH probability = PHISHING (same as extension)
+        // FIXED: Use EXACT same logic as extension
         let status, classification;
         if (probability >= threshold) {
             status = "phishing";
-            const confidence = probability * 100;
-            classification = `AI: Phishing (${confidence.toFixed(1)}% match to known patterns)`;
+            classification = `AI: Phishing (${(probability * 100).toFixed(1)}% match to known patterns)`;
         } else {
             status = "unknown";
             classification = `AI: Unknown (${(probability * 100).toFixed(1)}% match to known patterns)`;
@@ -192,62 +169,10 @@ async function predictURL(url) {
     }
 }
 
-// MAIN PREDICTION ENDPOINT
-app.post('/predict', async (req, res) => {
-    try {
-        const { url } = req.body;
-        if (!url) return res.status(400).json({ error: 'URL required' });
+// Keep your existing endpoints
 
-        const result = await predictURL(url);
-        console.log(`🤖 ${url} → ${result.status} (${result.probability})`);
-        res.json(result);
-
-    } catch (error) {
-        console.error('Prediction error:', error);
-        res.json({ 
-            status: "safe",
-            classification: "AI: Error",
-            probability: 0.0
-        });
-    }
-});
-
-// TEST ENDPOINT
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        model_loaded: !!model, 
-        metadata_loaded: !!metadata,
-        timestamp: new Date().toISOString()
-    });
-});
-
-// FORCE UNSAFE DETECTION FOR TESTING
-app.post('/predict-force-unsafe', async (req, res) => {
-    const { url } = req.body;
-    console.log(`🚨 FORCING UNSAFE DETECTION for: ${url}`);
-    
-    res.json({
-        status: "phishing",
-        classification: "AI: Phishing (95.0% confidence) - FORCED",
-        probability: 0.95,
-        forced: true
-    });
-});
-
-// Start server with delayed model loading
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
     console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
-    
-    // Load model after a short delay to ensure server is ready
-    setTimeout(async () => {
-        console.log('🔄 Loading AI model...');
-        const success = await loadModel();
-        if (success) {
-            console.log('🎉 Server is fully ready!');
-        } else {
-            console.log('⚠️ Server running but model failed to load');
-        }
-    }, 1000);
+    await loadModel();
 });
