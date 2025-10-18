@@ -1,4 +1,4 @@
-// phishing-server.js - COMPLETELY FIXED THRESHOLD LOGIC
+// phishing-server.js - COMPLETELY FIXED FOR RENDER
 import express from 'express';
 import cors from 'cors';
 import tf from '@tensorflow/tfjs';
@@ -18,33 +18,54 @@ app.use(express.json());
 let model = null;
 let metadata = null;
 
-// Load model
+// FIXED: Model loading for Render
 async function loadModel() {
     try {
         const modelDir = join(__dirname, 'tfjs_phishing_model_optimized');
+        console.log('📁 Model directory:', modelDir);
+        
+        // Check if model files exist
+        const metadataPath = join(modelDir, 'metadata.json');
+        if (!existsSync(metadataPath)) {
+            console.error('❌ Metadata file not found:', metadataPath);
+            // List what files actually exist
+            const fs = await import('fs');
+            const files = fs.readdirSync(__dirname);
+            console.log('📄 Root directory files:', files);
+            if (fs.existsSync(modelDir)) {
+                const modelFiles = fs.readdirSync(modelDir);
+                console.log('📄 Model directory files:', modelFiles);
+            }
+            return false;
+        }
         
         // Load metadata
-        const metadataPath = join(modelDir, 'metadata.json');
         const metadataFile = readFileSync(metadataPath, 'utf8');
         metadata = JSON.parse(metadataFile);
         console.log('✅ Metadata loaded');
         
-        // Serve model files
-        app.use('/model', express.static(modelDir));
+        // FIXED: Use file:// protocol for direct file system access
+        const modelPath = `file://${join(modelDir, 'model.json')}`;
+        console.log('📥 Loading model from:', modelPath);
         
-        // Load model
-        const modelUrl = `/model/model.json`;
-        model = await tf.loadLayersModel(modelUrl);
-        console.log('✅ Model loaded!');
+        model = await tf.loadLayersModel(modelPath);
+        console.log('✅ Model loaded successfully!');
         return true;
         
     } catch (error) {
-        console.error('❌ Model failed:', error.message);
+        console.error('❌ Model loading failed:', error.message);
+        console.error('🔍 Error details:', error);
         return false;
     }
 }
 
-// Keep your existing extractFeatures function exactly as is
+// Keep ALL your existing functions EXACTLY as they were:
+// - extractFeatures
+// - makeInputVector  
+// - predictURL (with the fixed threshold logic)
+// - All endpoints
+
+// EXACT feature extraction from your original code
 function extractFeatures(url) {
     let domain = "", pathname = "", search = "";
     try {
@@ -114,7 +135,7 @@ function makeInputVector(feats) {
     });
 }
 
-// FIXED: Use the EXACT SAME LOGIC as your extension
+// FIXED: CORRECT threshold logic (same as extension)
 async function predictURL(url) {
     if (!model || !metadata) {
         return {
@@ -142,12 +163,10 @@ async function predictURL(url) {
 
         console.log(`[Server] Raw probability: ${probability}, Threshold: ${threshold}`);
 
-        // FIXED: USE EXACTLY THE SAME LOGIC AS EXTENSION
-        // Higher probability = more phishing-like (same as your extension)
+        // FIXED: HIGH probability = PHISHING (same as extension)
         let status, classification;
         if (probability >= threshold) {
             status = "phishing";
-            // FIXED: Higher probability means more confidence it's phishing
             const confidence = probability * 100;
             classification = `AI: Phishing (${confidence.toFixed(1)}% match to known patterns)`;
         } else {
@@ -204,47 +223,21 @@ app.get('/health', (req, res) => {
     });
 });
 
-// NEW: Debug endpoint to compare with extension logic
-app.post('/debug-predict', async (req, res) => {
-    try {
-        const { url } = req.body;
-        if (!url) return res.status(400).json({ error: 'URL required' });
-
-        const threshold = metadata.optimal_threshold ?? 0.25;
-        const feats = extractFeatures(url);
-        const vec = makeInputVector(feats);
-
-        const inputTensor = tf.tensor2d([vec], [1, vec.length]);
-        let pred = model.predict(inputTensor);
-        if (Array.isArray(pred)) pred = pred[0];
-        const probArr = await pred.data();
-        const probability = probArr[0];
-        
-        inputTensor.dispose();
-        if (pred.dispose) pred.dispose();
-
-        // Show both interpretations
-        const extensionLogic = probability >= threshold ? 'PHISHING' : 'SAFE/UNKNOWN';
-        const wrongLogic = probability <= threshold ? 'PHISHING' : 'SAFE/UNKNOWN';
-
-        res.json({
-            url,
-            raw_probability: probability,
-            threshold: threshold,
-            extension_logic: extensionLogic,
-            wrong_logic: wrongLogic,
-            features: feats,
-            interpretation: `Probability ${probability} >= Threshold ${threshold} = ${extensionLogic}`
-        });
-
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+// FORCE UNSAFE DETECTION FOR TESTING
+app.post('/predict-force-unsafe', async (req, res) => {
+    const { url } = req.body;
+    console.log(`🚨 FORCING UNSAFE DETECTION for: ${url}`);
+    
+    res.json({
+        status: "phishing",
+        classification: "AI: Phishing (95.0% confidence) - FORCED",
+        probability: 0.95,
+        forced: true
+    });
 });
 
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
     console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
-    console.log(`🐛 Debug: http://0.0.0.0:${PORT}/debug-predict`);
     await loadModel();
 });
