@@ -1,4 +1,4 @@
-// phishing-server.js - COMPLETELY FIXED FOR RENDER
+// phishing-server.js - FIXED MODEL LOADING FOR RENDER
 import express from 'express';
 import cors from 'cors';
 import tf from '@tensorflow/tfjs';
@@ -18,52 +18,51 @@ app.use(express.json());
 let model = null;
 let metadata = null;
 
-// FIXED: Model loading for Render
+// FIXED: Load model directly from filesystem
 async function loadModel() {
     try {
         const modelDir = join(__dirname, 'tfjs_phishing_model_optimized');
         console.log('📁 Model directory:', modelDir);
         
-        // Check if model files exist
-        const metadataPath = join(modelDir, 'metadata.json');
-        if (!existsSync(metadataPath)) {
-            console.error('❌ Metadata file not found:', metadataPath);
-            // List what files actually exist
-            const fs = await import('fs');
-            const files = fs.readdirSync(__dirname);
-            console.log('📄 Root directory files:', files);
-            if (fs.existsSync(modelDir)) {
-                const modelFiles = fs.readdirSync(modelDir);
-                console.log('📄 Model directory files:', modelFiles);
-            }
+        // Check if model directory exists
+        if (!existsSync(modelDir)) {
+            console.error('❌ Model directory not found');
             return false;
         }
         
+        // List files for debugging
+        const fs = await import('fs');
+        const files = fs.readdirSync(modelDir);
+        console.log('📄 Model files:', files);
+        
         // Load metadata
+        const metadataPath = join(modelDir, 'metadata.json');
+        if (!existsSync(metadataPath)) {
+            console.error('❌ Metadata file not found');
+            return false;
+        }
+        
         const metadataFile = readFileSync(metadataPath, 'utf8');
         metadata = JSON.parse(metadataFile);
         console.log('✅ Metadata loaded');
         
-        // FIXED: Use file:// protocol for direct file system access
-        const modelPath = `file://${join(modelDir, 'model.json')}`;
-        console.log('📥 Loading model from:', modelPath);
+        // FIXED: Load model using HTTP server (serve files then load via HTTP)
+        // First, set up static file serving
+        app.use('/model', express.static(modelDir));
         
-        model = await tf.loadLayersModel(modelPath);
+        // Then load the model via HTTP from our own server
+        const modelUrl = `http://localhost:${PORT}/model/model.json`;
+        console.log('📥 Loading model from:', modelUrl);
+        
+        model = await tf.loadLayersModel(modelUrl);
         console.log('✅ Model loaded successfully!');
         return true;
         
     } catch (error) {
         console.error('❌ Model loading failed:', error.message);
-        console.error('🔍 Error details:', error);
         return false;
     }
 }
-
-// Keep ALL your existing functions EXACTLY as they were:
-// - extractFeatures
-// - makeInputVector  
-// - predictURL (with the fixed threshold logic)
-// - All endpoints
 
 // EXACT feature extraction from your original code
 function extractFeatures(url) {
@@ -135,7 +134,7 @@ function makeInputVector(feats) {
     });
 }
 
-// FIXED: CORRECT threshold logic (same as extension)
+// FIXED: CORRECT threshold logic (HIGH probability = PHISHING)
 async function predictURL(url) {
     if (!model || !metadata) {
         return {
@@ -236,8 +235,19 @@ app.post('/predict-force-unsafe', async (req, res) => {
     });
 });
 
-app.listen(PORT, '0.0.0.0', async () => {
+// Start server with delayed model loading
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
     console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
-    await loadModel();
+    
+    // Load model after a short delay to ensure server is ready
+    setTimeout(async () => {
+        console.log('🔄 Loading AI model...');
+        const success = await loadModel();
+        if (success) {
+            console.log('🎉 Server is fully ready!');
+        } else {
+            console.log('⚠️ Server running but model failed to load');
+        }
+    }, 1000);
 });
