@@ -1,0 +1,5 @@
+=== DATASET SUMMARY ===
+Total URLs: 100000
+Phishing URLs: 50000 (50.0%)
+Benign URLs: 50000 (50.0%)
+Ratio: 50000:50000
