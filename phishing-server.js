@@ -1,7 +1,7 @@
-// phishing-server.js - FIXED VERSION for Render
+// phishing-server.js - COMPLETELY FIXED THRESHOLD LOGIC
 import express from 'express';
 import cors from 'cors';
-import tf from '@tensorflow/tfjs'; // Use regular tfjs, not tfjs-node
+import tf from '@tensorflow/tfjs';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -12,28 +12,16 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enhanced CORS for production
-app.use(cors({
-  origin: '*', // Allow all origins for testing
-  credentials: true
-}));
-
+app.use(cors());
 app.use(express.json());
 
 let model = null;
 let metadata = null;
 
-// Load model - FIXED for Render compatibility
+// Load model
 async function loadModel() {
     try {
         const modelDir = join(__dirname, 'tfjs_phishing_model_optimized');
-        
-        // Check if model files exist
-        if (!existsSync(join(modelDir, 'metadata.json'))) {
-            console.error('❌ Model files not found in:', modelDir);
-            console.log('📁 Available files:', await fs.promises.readdir(modelDir).catch(() => 'Cannot read directory'));
-            return false;
-        }
         
         // Load metadata
         const metadataPath = join(modelDir, 'metadata.json');
@@ -41,27 +29,22 @@ async function loadModel() {
         metadata = JSON.parse(metadataFile);
         console.log('✅ Metadata loaded');
         
-        // Serve static files
+        // Serve model files
         app.use('/model', express.static(modelDir));
         
-        // FIXED: Use HTTP URL for model loading on Render
-        const modelUrl = `http://localhost:${PORT}/model/model.json`;
-        console.log('📥 Loading model from:', modelUrl);
-        
+        // Load model
+        const modelUrl = `/model/model.json`;
         model = await tf.loadLayersModel(modelUrl);
-        console.log('✅ Model loaded successfully!');
-        console.log('📊 Model input shape:', model.inputs[0].shape);
-        console.log('📊 Model output shape:', model.outputs[0].shape);
+        console.log('✅ Model loaded!');
         return true;
         
     } catch (error) {
-        console.error('❌ Model loading failed:', error.message);
-        console.error('🔍 Error details:', error.stack);
+        console.error('❌ Model failed:', error.message);
         return false;
     }
 }
 
-// EXACT feature extraction from your sandbox.js
+// Keep your existing extractFeatures function exactly as is
 function extractFeatures(url) {
     let domain = "", pathname = "", search = "";
     try {
@@ -131,7 +114,7 @@ function makeInputVector(feats) {
     });
 }
 
-// FIXED: Use the SAME logic as sandbox.js
+// FIXED: Use the EXACT SAME LOGIC as your extension
 async function predictURL(url) {
     if (!model || !metadata) {
         return {
@@ -147,9 +130,6 @@ async function predictURL(url) {
         const feats = extractFeatures(url);
         const vec = makeInputVector(feats);
 
-        console.log(`🔍 Features extracted:`, Object.keys(feats).length);
-        console.log(`🔍 Vector length:`, vec.length);
-
         const inputTensor = tf.tensor2d([vec], [1, vec.length]);
         let pred = model.predict(inputTensor);
         if (Array.isArray(pred)) pred = pred[0];
@@ -162,18 +142,17 @@ async function predictURL(url) {
 
         console.log(`[Server] Raw probability: ${probability}, Threshold: ${threshold}`);
 
-        // FIXED: Use consistent logic with extension
+        // FIXED: USE EXACTLY THE SAME LOGIC AS EXTENSION
+        // Higher probability = more phishing-like (same as your extension)
         let status, classification;
         if (probability >= threshold) {
             status = "phishing";
+            // FIXED: Higher probability means more confidence it's phishing
             const confidence = probability * 100;
-            classification = `AI: Phishing pattern detected (${confidence.toFixed(1)}% confidence)`;
-        } else if (probability > 0.1 && probability < threshold) {
-            status = "unknown";
-            classification = `AI: Unfamiliar pattern (${(probability * 100).toFixed(1)}% match to phishing patterns)`;
+            classification = `AI: Phishing (${confidence.toFixed(1)}% match to known patterns)`;
         } else {
-            status = "safe";
-            classification = `AI: Likely safe (${((1 - probability) * 100).toFixed(1)}% confidence)`;
+            status = "unknown";
+            classification = `AI: Unknown (${(probability * 100).toFixed(1)}% match to known patterns)`;
         }
 
         return { 
@@ -185,14 +164,12 @@ async function predictURL(url) {
         };
 
     } catch (err) {
-        console.error("❌ Prediction failed:", err);
-        console.error("🔍 Error stack:", err.stack);
+        console.error("Prediction failed:", err);
         return {
             status: "safe",
             classification: "AI: Error - assuming safe",
             probability: 0.0,
             originalUrl: url,
-            error: err.message
         };
     }
 }
@@ -203,109 +180,71 @@ app.post('/predict', async (req, res) => {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: 'URL required' });
 
-        console.log(`🔍 Predicting URL: ${url}`);
-        
-        if (!model || !metadata) {
-            console.log('❌ Model not ready');
-            return res.json({ 
-                status: "safe",
-                classification: "AI: Model not ready",
-                probability: 0.0,
-                originalUrl: url,
-                error: "model_not_loaded"
-            });
-        }
-
         const result = await predictURL(url);
         console.log(`🤖 ${url} → ${result.status} (${result.probability})`);
         res.json(result);
 
     } catch (error) {
-        console.error('❌ Prediction error:', error);
-        console.error('🔍 Error stack:', error.stack);
-        res.status(500).json({ 
+        console.error('Prediction error:', error);
+        res.json({ 
             status: "safe",
-            classification: "AI: Error in prediction",
-            probability: 0.0,
-            originalUrl: req.body?.url || 'unknown',
-            error: error.message
+            classification: "AI: Error",
+            probability: 0.0
         });
     }
 });
 
-// TEST ENDPOINT - to verify server is working
+// TEST ENDPOINT
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'ok', 
         model_loaded: !!model, 
         metadata_loaded: !!metadata,
-        timestamp: new Date().toISOString(),
-        server: 'Render',
-        port: PORT
+        timestamp: new Date().toISOString()
     });
 });
 
-// NEW: Model info endpoint
-app.get('/model-info', (req, res) => {
-    if (!model) {
-        return res.json({ error: 'Model not loaded' });
+// NEW: Debug endpoint to compare with extension logic
+app.post('/debug-predict', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: 'URL required' });
+
+        const threshold = metadata.optimal_threshold ?? 0.25;
+        const feats = extractFeatures(url);
+        const vec = makeInputVector(feats);
+
+        const inputTensor = tf.tensor2d([vec], [1, vec.length]);
+        let pred = model.predict(inputTensor);
+        if (Array.isArray(pred)) pred = pred[0];
+        const probArr = await pred.data();
+        const probability = probArr[0];
+        
+        inputTensor.dispose();
+        if (pred.dispose) pred.dispose();
+
+        // Show both interpretations
+        const extensionLogic = probability >= threshold ? 'PHISHING' : 'SAFE/UNKNOWN';
+        const wrongLogic = probability <= threshold ? 'PHISHING' : 'SAFE/UNKNOWN';
+
+        res.json({
+            url,
+            raw_probability: probability,
+            threshold: threshold,
+            extension_logic: extensionLogic,
+            wrong_logic: wrongLogic,
+            features: feats,
+            interpretation: `Probability ${probability} >= Threshold ${threshold} = ${extensionLogic}`
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
-    
-    res.json({
-        inputs: model.inputs.map(input => ({
-            shape: input.shape,
-            dtype: input.dtype
-        })),
-        outputs: model.outputs.map(output => ({
-            shape: output.shape,
-            dtype: output.dtype
-        })),
-        layers: model.layers.length,
-        metadata: metadata ? {
-            feature_names: metadata.feature_names,
-            optimal_threshold: metadata.optimal_threshold
-        } : null
-    });
-});
-
-// FORCE UNSAFE DETECTION FOR TESTING
-app.post('/predict-force-unsafe', async (req, res) => {
-    const { url } = req.body;
-    console.log(`🚨 FORCING UNSAFE DETECTION for: ${url}`);
-    
-    res.json({
-        status: "phishing",
-        classification: "AI: Phishing (95.0% confidence) - FORCED",
-        probability: 0.95,
-        forced: true
-    });
 });
 
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
     console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
-    console.log(`🔧 Model info: http://0.0.0.0:${PORT}/model-info`);
-    console.log(`🔄 Loading model...`);
-    
-    // Load model with retry logic
-    let loaded = false;
-    let attempts = 0;
-    const maxAttempts = 3;
-    
-    while (!loaded && attempts < maxAttempts) {
-        attempts++;
-        console.log(`🔄 Model loading attempt ${attempts}/${maxAttempts}`);
-        loaded = await loadModel();
-        
-        if (!loaded && attempts < maxAttempts) {
-            console.log(`⏳ Retrying in 5 seconds...`);
-            await new Promise(resolve => setTimeout(resolve, 5000));
-        }
-    }
-    
-    if (loaded) {
-        console.log('🎉 Server ready!');
-    } else {
-        console.log('❌ Server started but model failed to load');
-    }
+    console.log(`🐛 Debug: http://0.0.0.0:${PORT}/debug-predict`);
+    await loadModel();
 });
