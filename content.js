@@ -108,40 +108,40 @@ function makeInputVector(feats) {
 }
 
 async function runAIPrediction(url) {
-  try {
-    await loadModel();
-    const feats = extractFeatures(url);
-    console.log('[PhishingProtection] Extracted features:', feats);
-    
-    const vec = makeInputVector(feats);
-    const input = tf.tensor2d([vec]);
-    let pred = tfModel.predict(input);
-    if (Array.isArray(pred)) pred = pred[0];
-    const prob = (await pred.data())[0];
-    input.dispose();
-    if (pred.dispose) pred.dispose();
+    try {
+        await loadModel();
+        const feats = extractFeatures(url);
+        console.log('[PhishingProtection] Extracted features:', feats);
+        
+        const vec = makeInputVector(feats);
+        const input = tf.tensor2d([vec]);
+        let pred = tfModel.predict(input);
+        if (Array.isArray(pred)) pred = pred[0];
+        const prob = (await pred.data())[0];
+        input.dispose();
+        if (pred.dispose) pred.dispose();
 
-    console.log(`[PhishingProtection] AI phishing probability: ${prob}, threshold: ${optimalThreshold}`);
+        console.log(`[PhishingProtection] RAW - Probability: ${prob}, Threshold: ${optimalThreshold}`);
+        console.log(`[PhishingProtection] INTERPRETATION - Higher probability = more phishing-like`);
 
-    // Model predicts probability of being PHISHING (since trained on phishing-only data)
-    // Higher probability = more like known phishing patterns
-    if (prob >= optimalThreshold) {
-      return { 
-        status: "phishing", 
-        classification: `AI: Phishing (${(prob * 100).toFixed(1)}% match to known patterns)`,
-        probability: prob 
-      };
-    } else {
-      return { 
-        status: "unknown", 
-        classification: `AI: Unknown (${(prob * 100).toFixed(1)}% match to known patterns)`,
-        probability: prob 
-      };
+        // Consistent with fixed server logic
+        if (prob >= optimalThreshold) {
+            return { 
+                status: "phishing", 
+                classification: `AI: Phishing (${(prob * 100).toFixed(1)}% match to known patterns)`,
+                probability: prob 
+            };
+        } else {
+            return { 
+                status: "unknown", 
+                classification: `AI: Unknown (${(prob * 100).toFixed(1)}% match to known patterns)`,
+                probability: prob 
+            };
+        }
+    } catch (err) {
+        console.error("[PhishingProtection] AI prediction error:", err);
+        return { status: "warn", classification: "AI Error" };
     }
-  } catch (err) {
-    console.error("[PhishingProtection] AI prediction error:", err);
-    return { status: "warn", classification: "AI Error" };
-  }
 }
 
 // Listeners (updated with whitelist check)
@@ -171,4 +171,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   return true;
+
 });
