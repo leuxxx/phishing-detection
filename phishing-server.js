@@ -169,8 +169,50 @@ async function predictURL(url) {
     }
 }
 
-// Keep your existing endpoints
+// MAIN PREDICTION ENDPOINT
+app.post('/predict', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: 'URL required' });
 
+        const result = await predictURL(url);
+        console.log(`🤖 ${url} → ${result.status} (${result.probability})`);
+        res.json(result);
+
+    } catch (error) {
+        console.error('Prediction error:', error);
+        res.json({ 
+            status: "safe",
+            classification: "AI: Error",
+            probability: 0.0
+        });
+    }
+});
+
+// TEST ENDPOINT
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        model_loaded: !!model, 
+        metadata_loaded: !!metadata,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// FORCE UNSAFE DETECTION FOR TESTING
+app.post('/predict-force-unsafe', async (req, res) => {
+    const { url } = req.body;
+    console.log(`🚨 FORCING UNSAFE DETECTION for: ${url}`);
+    
+    res.json({
+        status: "phishing",
+        classification: "AI: Phishing (95.0% confidence) - FORCED",
+        probability: 0.95,
+        forced: true
+    });
+});
+
+// Start server with delayed model loading
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
     console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
