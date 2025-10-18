@@ -1,6 +1,7 @@
+// phishing-server.js - FIXED VERSION for Render
 import express from 'express';
 import cors from 'cors';
-import tf from '@tensorflow/tfjs-node'; // Use tfjs-node for better performance
+import tf from '@tensorflow/tfjs'; // Use regular tfjs, not tfjs-node
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -9,15 +10,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001; // Render provides PORT
+const PORT = process.env.PORT || 3001;
 
 // Enhanced CORS for production
 app.use(cors({
-  origin: [
-    'chrome-extension://*',
-    'https://your-extension-id.chromiumapp.org',
-    'http://localhost:*'
-  ],
+  origin: '*', // Allow all origins for testing
   credentials: true
 }));
 
@@ -26,7 +23,7 @@ app.use(express.json());
 let model = null;
 let metadata = null;
 
-// Load model - UPDATED FOR RENDER
+// Load model - FIXED for Render compatibility
 async function loadModel() {
     try {
         const modelDir = join(__dirname, 'tfjs_phishing_model_optimized');
@@ -34,6 +31,7 @@ async function loadModel() {
         // Check if model files exist
         if (!existsSync(join(modelDir, 'metadata.json'))) {
             console.error('❌ Model files not found in:', modelDir);
+            console.log('📁 Available files:', await fs.promises.readdir(modelDir).catch(() => 'Cannot read directory'));
             return false;
         }
         
@@ -43,17 +41,22 @@ async function loadModel() {
         metadata = JSON.parse(metadataFile);
         console.log('✅ Metadata loaded');
         
-        // For Render, serve static files from the same directory
+        // Serve static files
         app.use('/model', express.static(modelDir));
         
-        // Load model using local file path
-        const modelPath = `file://${join(modelDir, 'model.json')}`;
-        model = await tf.loadLayersModel(modelPath);
+        // FIXED: Use HTTP URL for model loading on Render
+        const modelUrl = `http://localhost:${PORT}/model/model.json`;
+        console.log('📥 Loading model from:', modelUrl);
+        
+        model = await tf.loadLayersModel(modelUrl);
         console.log('✅ Model loaded successfully!');
+        console.log('📊 Model input shape:', model.inputs[0].shape);
+        console.log('📊 Model output shape:', model.outputs[0].shape);
         return true;
         
     } catch (error) {
         console.error('❌ Model loading failed:', error.message);
+        console.error('🔍 Error details:', error.stack);
         return false;
     }
 }
@@ -193,22 +196,39 @@ async function predictURL(url) {
         };
     }
 }
+
 // MAIN PREDICTION ENDPOINT
 app.post('/predict', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: 'URL required' });
 
+        console.log(`🔍 Predicting URL: ${url}`);
+        
+        if (!model || !metadata) {
+            console.log('❌ Model not ready');
+            return res.json({ 
+                status: "safe",
+                classification: "AI: Model not ready",
+                probability: 0.0,
+                originalUrl: url,
+                error: "model_not_loaded"
+            });
+        }
+
         const result = await predictURL(url);
         console.log(`🤖 ${url} → ${result.status} (${result.probability})`);
         res.json(result);
 
     } catch (error) {
-        console.error('Prediction error:', error);
-        res.json({ 
+        console.error('❌ Prediction error:', error);
+        console.error('🔍 Error stack:', error.stack);
+        res.status(500).json({ 
             status: "safe",
-            classification: "AI: Error",
-            probability: 0.0
+            classification: "AI: Error in prediction",
+            probability: 0.0,
+            originalUrl: req.body?.url || 'unknown',
+            error: error.message
         });
     }
 });
@@ -219,7 +239,32 @@ app.get('/health', (req, res) => {
         status: 'ok', 
         model_loaded: !!model, 
         metadata_loaded: !!metadata,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        server: 'Render',
+        port: PORT
+    });
+});
+
+// NEW: Model info endpoint
+app.get('/model-info', (req, res) => {
+    if (!model) {
+        return res.json({ error: 'Model not loaded' });
+    }
+    
+    res.json({
+        inputs: model.inputs.map(input => ({
+            shape: input.shape,
+            dtype: input.dtype
+        })),
+        outputs: model.outputs.map(output => ({
+            shape: output.shape,
+            dtype: output.dtype
+        })),
+        layers: model.layers.length,
+        metadata: metadata ? {
+            feature_names: metadata.feature_names,
+            optimal_threshold: metadata.optimal_threshold
+        } : null
     });
 });
 
@@ -236,11 +281,31 @@ app.post('/predict-force-unsafe', async (req, res) => {
     });
 });
 
-// Update server startup
 app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
     console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
-    await loadModel();
-
+    console.log(`🔧 Model info: http://0.0.0.0:${PORT}/model-info`);
+    console.log(`🔄 Loading model...`);
+    
+    // Load model with retry logic
+    let loaded = false;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (!loaded && attempts < maxAttempts) {
+        attempts++;
+        console.log(`🔄 Model loading attempt ${attempts}/${maxAttempts}`);
+        loaded = await loadModel();
+        
+        if (!loaded && attempts < maxAttempts) {
+            console.log(`⏳ Retrying in 5 seconds...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+    }
+    
+    if (loaded) {
+        console.log('🎉 Server ready!');
+    } else {
+        console.log('❌ Server started but model failed to load');
+    }
 });
-
