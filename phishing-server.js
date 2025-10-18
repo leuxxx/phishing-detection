@@ -144,6 +144,9 @@ async function predictURL(url) {
         const feats = extractFeatures(url);
         const vec = makeInputVector(feats);
 
+        console.log(`🔍 Features extracted:`, Object.keys(feats).length);
+        console.log(`🔍 Vector length:`, vec.length);
+
         const inputTensor = tf.tensor2d([vec], [1, vec.length]);
         let pred = model.predict(inputTensor);
         if (Array.isArray(pred)) pred = pred[0];
@@ -156,7 +159,7 @@ async function predictURL(url) {
 
         console.log(`[Server] Raw probability: ${probability}, Threshold: ${threshold}`);
 
-        // FIXED: Use the CORRECT logic (same as extension)
+        // FIXED: Use consistent logic with extension
         let status, classification;
         if (probability >= threshold) {
             status = "phishing";
@@ -179,12 +182,14 @@ async function predictURL(url) {
         };
 
     } catch (err) {
-        console.error("Prediction failed:", err);
+        console.error("❌ Prediction failed:", err);
+        console.error("🔍 Error stack:", err.stack);
         return {
             status: "safe",
             classification: "AI: Error - assuming safe",
             probability: 0.0,
             originalUrl: url,
+            error: err.message
         };
     }
 }
@@ -238,3 +243,4 @@ app.listen(PORT, '0.0.0.0', async () => {
     await loadModel();
 
 });
+
