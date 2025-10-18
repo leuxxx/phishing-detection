@@ -156,19 +156,18 @@ async function predictURL(url) {
 
         console.log(`[Server] Raw probability: ${probability}, Threshold: ${threshold}`);
 
-        // FIXED: Use the correct logic for confidence calculation
+        // FIXED: Use the CORRECT logic (same as extension)
         let status, classification;
-        if (probability <= threshold) {
+        if (probability >= threshold) {
             status = "phishing";
-            // FIXED: Calculate confidence correctly - higher probability = more phishing-like
-            const confidence = (1 - probability) * 100;
+            const confidence = probability * 100;
             classification = `AI: Phishing pattern detected (${confidence.toFixed(1)}% confidence)`;
-        } else if (probability > threshold && probability <= 0.75) {
+        } else if (probability > 0.1 && probability < threshold) {
             status = "unknown";
-            classification = `AI: Unfamiliar pattern (${(probability * 100).toFixed(1)}% confidence safe)`;
+            classification = `AI: Unfamiliar pattern (${(probability * 100).toFixed(1)}% match to phishing patterns)`;
         } else {
             status = "safe";
-            classification = `AI: Likely safe (${(probability * 100).toFixed(1)}% confidence)`;
+            classification = `AI: Likely safe (${((1 - probability) * 100).toFixed(1)}% confidence)`;
         }
 
         return { 
@@ -189,7 +188,6 @@ async function predictURL(url) {
         };
     }
 }
-
 // MAIN PREDICTION ENDPOINT
 app.post('/predict', async (req, res) => {
     try {
@@ -238,4 +236,5 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
     await loadModel();
+
 });
