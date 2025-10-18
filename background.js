@@ -1,7 +1,7 @@
 // background.js - ENHANCED WITH FIREBASE & INDEXEDDB
 importScripts('obfuscation.js');
 
-const NODE_SERVER_URL = 'http://localhost:3001';
+const NODE_SERVER_URL = 'https://phishing-detection-1mpi.onrender.com';
 
 // =========================
 // FIREBASE CONFIGURATION
