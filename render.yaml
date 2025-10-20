@@ -5,6 +5,13 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 18.17.0
+    # Auto-deploy from main branch
+    branches:
+      - name: main
+        enabled: true
