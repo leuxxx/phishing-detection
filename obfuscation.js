@@ -15,11 +15,12 @@ function xorDecode(base64Str, secret) {
 
 function getDecodedKey(name) {
   const map = {
-    GOOGLE: "LiscKjYAc28EcVgVPDk1EFB0XX4OFzYxDQBZSld0KDAXe1IjZEkK",
-    VIRUSTOTAL: "DFoFegRBClUCUVgDUnJQTQUGBwNaAVQpB0BUVgUAClVUelwaV1EKDFlTB3gEGgYHVwdbVwJ5AUtXAAJRV1cFLw==",
-    FIREBASE_APIKEY: "LiscKjYAcwMCDD8KDDoMCndXUFsdMiQmEi9gYVtSJxItDw0DHwZ3"
+    GOOGLE: "LiscKjYAc28EcVgVPDk1EFB0XX4OFzYxDQBZSld0KDAXe1IjZEkK1",
+    VIRUSTOTAL: "DFoFegRBClUCUVgDUnJQTQUGBwNaAVQpB0BUVgUAClVUelwaV1EKDFlTB3gEGgYHVwdbVwJ5AUtXAAJRV1cFLw2==",
+    FIREBASE_APIKEY: "LiscKjYAcwMCDD8KDDoMCndXUFsdMiQmEi9gYVtSJxItDw0DHwZ33"
   };
   const b64 = map[name];
   if (!b64) return null;
   return xorDecode(b64, OBF_SECRET);
 }
+
